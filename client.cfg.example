@@ -1,0 +1,6 @@
+homedir="/home/realizator/emiter-client/"
+telnet_port=2137
+cfg_broadcast_port=8004
+cfg_broadcast_host="localhost"
+cfg_broadcast_password="#####"
+
