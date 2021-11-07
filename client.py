@@ -75,11 +75,6 @@ class Core:
     program_index_now = 0
     program_index_next = 0
 
-    track_rem = 0
-    track_end_stamp = 0
-    status_update_refresh = 30
-    status_update_timer = 30
-
     studio_start_flag = False
     studio_split_flag = False
     studio_counter = 0
