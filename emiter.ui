@@ -298,6 +298,9 @@ color: rgb(255,0,0)</string>
            <height>20</height>
           </rect>
          </property>
+         <property name="styleSheet">
+          <string notr="true">color: rgb(0, 0, 0);</string>
+         </property>
          <property name="text">
           <string/>
          </property>
@@ -339,6 +342,9 @@ color: rgb(255,0,0)</string>
            <width>381</width>
            <height>20</height>
           </rect>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">color: rgb(0, 0, 0);</string>
          </property>
          <property name="text">
           <string/>

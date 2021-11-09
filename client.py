@@ -10,7 +10,6 @@ from PyQt5.QtWidgets import QApplication, QDialog, QTableWidget, QTableWidgetIte
 
 import time
 import json
-import re
 import signal
 import threading
 
@@ -35,9 +34,6 @@ class View(QtWidgets.QMainWindow):
         self.ui = emiterui.Ui_EmiterClient()
         self.ui.setupUi(self)
         self.util = gui_utils.Gui_utils(self.ui)
-
-        #resize'y
-        self.util.table_resize()
 
         #bindy
         self.ui.b_connect_now.clicked.connect(core.connect)
@@ -72,7 +68,6 @@ class View(QtWidgets.QMainWindow):
     #     else:
     #         event.ignore()
         event.accept()
-        #liquidsoap.stop()
         
 
 class Core:
@@ -89,8 +84,8 @@ class Core:
         {"slug":"custom", "listname":"<custom> Inna audycja", "rds":"", "anytime":True}
     ]
 
-    studio_start_flag = False
-    studio_split_flag = False
+    live = False
+    connection_error = 0
     studio_counter = 0
 
     studio_start_timer = 0
@@ -106,6 +101,131 @@ class Core:
         self.timer.timeout.connect(self.masterTimer)
         self.timer.start(100)
 
+    def masterTimer(self):
+        now = time.localtime()
+
+        if self.sec_timestamp != now.tm_sec:
+            #nowa sekunda
+            self.secondant(now)
+            self.sec_timestamp = now.tm_sec
+
+            if self.day_timestamp != now.tm_mday:
+                #nowy dzień
+                view.util.set_date(now.tm_wday,now)
+                self.day_timestamp = now.tm_mday
+
+        #connection tracker
+        if self.live:
+            if not liquidsoap.connected_flag:
+                #disconnected now
+                self.live = False
+                view.util.studio_status_disconnected()
+                view.status("Rozłączono z serwerem emisji")
+        else:
+            if liquidsoap.connected_flag:
+                #connected right now
+                self.live = True
+                view.util.studio_status_connected()
+                view.status("Połączono z serwerem emisji")
+
+        if liquidsoap.errorcode != self.connection_error:
+            view.errorBox("Błąd połączenia",liquidsoap.error_text(liquidsoap.errorcode))
+            self.disconnect()
+            self.connection_error = liquidsoap.errorcode
+            
+
+    def secondant(self,now):
+        #funkcja wywoływane w każdej nowej sekundzie
+
+        #zegar główny
+        view.util.update_time(now)
+
+        #sekundy do pełnej
+        break_sec = self.break_interval - (time.time() % self.break_interval) +1
+        view.util.update_break_downtime(time.gmtime(break_sec))
+
+        #TODO zegar studia
+
+    def disconnect(self):
+        print("przycisk rozłącz")
+        view.util.studio_status_disconnecting()
+        liquidsoap.stop_studio()
+        self.program_index_now = 0
+
+    def connect(self):
+        print("przycisk łącze teraz")
+    
+        if self.program_list[self.program_index_next]["slug"] == "":
+            view.errorBox("Błąd","Nie wybrano audycji")
+            return
+
+        if self.program_index_next == self.program_index_now:
+            view.errorBox("Błąd","Nie zmieniono audycji")
+            return
+
+        #push RDS here - TODO rds
+        liquidsoap.insert_rds(self.program_list[self.program_index_next]["slug"],"")
+
+        if self.live:
+            view.status("Zmiana audycji")
+        else:
+            view.status("Łączenie")
+            view.util.studio_status_wait()
+            liquidsoap.start_studio()
+
+        #przerzut
+        self.program_index_now = self.program_index_next
+        view.ui.current_aud_preset.setText(self.program_list[self.program_index_now]["listname"])
+
+
+    def update_rds(self):
+        print("przycisk aktualizuj")
+        #split = Comm(['record.split czwartek'])
+        #self.threadpool.start(split)
+        rds = None
+
+        if self.program_index_next == 0:
+            view.errorBox("Błąd","Nie wybrano żadnej audycji")
+        elif self.program_index_next != self.program_index_now:
+            view.errorBox("Nowa audycja?","Ustawiono nową audycję \"%s\", ale jej nie zaczęto.\nRDS zostanie zaktualizowany po wciśnięciu \"Start nowej audycji\"." % self.program_list[self.program_index_next]["slug"])
+            rds = view.rds_textbox(default=self.program_list[self.program_index_next]["rds"])
+        else:
+            view.status("aktualizowanie RDS")
+            #okienko
+            rds = view.rds_textbox(default=self.program_list[self.program_index_now]["rds"])
+            #aktualizuj
+            pass
+
+        if rds is not None:
+            print("New rds is "+rds)
+            view.ui.aud_rds.setText(rds)
+
+    def change_program(self):
+        #zmiana audycji
+        print("zmiana na pasku")
+        self.program_index_next = view.ui.next_aud_preset.currentIndex()
+
+        pgm = self.program_list[self.program_index_next]
+        view.ui.aud_rds.setText(pgm["rds"])
+        
+    #set program incoming
+    def set_next_program(self):
+        #get program starting in next 15 minutes
+        pgm_now = self.program.get_program_now(False,True,time_margin=15)
+
+        #find program by slug (0 by default)
+        index_now = 0 
+
+        #gdy znaleziono program
+        if pgm_now["found"]:
+            if not pgm_now["replay"]:
+                for i in range(len(self.program_list)):
+                    if self.program_list[i]["slug"] == pgm_now["slug"]:
+                        index_now = i
+                        break
+
+        view.ui.next_aud_preset.setCurrentIndex(index_now)
+        
 
     def update_pgm_list(self):
         #load api
@@ -133,82 +253,6 @@ class Core:
         #set to 0
         view.ui.next_aud_preset.setCurrentIndex(0)
 
-    def masterTimer(self):
-        now = time.localtime()
-
-        if self.sec_timestamp != now.tm_sec:
-            #nowa sekunda
-            self.secondant(now)
-            self.sec_timestamp = now.tm_sec
-
-            if self.day_timestamp != now.tm_mday:
-                #nowy dzień
-                view.util.set_date(now.tm_wday,now)
-                self.day_timestamp = now.tm_mday
-
-    def secondant(self,now):
-        #funkcja wywoływane w każdej nowej sekundzie
-
-        #zegar główny
-        view.util.update_time(now)
-
-        #sekundy do pełnej
-        break_sec = self.break_interval - (time.time() % self.break_interval) +1
-        view.util.update_break_downtime(time.gmtime(break_sec))
-
-        #TODO zegar studia
-
-    def disconnect(self):
-        print("przycisk rozłącz")
-        #self.broadcast_stop()
-
-    def connect(self):
-        print("przycisk łącze teraz")
-        #self.broadcast_start()
-    
-    def update_rds(self):
-        print("przycisk aktualizuj")
-        #split = Comm(['record.split czwartek'])
-        #self.threadpool.start(split)
-        rds = None
-
-        if self.program_index_next == 0:
-            view.errorBox("Błąd","Nie wybrano żadnej audycji")
-        elif self.program_index_next != self.program_index_now:
-            view.errorBox("Nowa audycja?","Ustawiono nową audycję \"%s\", ale jej nie zaczęto.\nRDS zostanie zaktualizowany po wciśnięciu \"Start nowej audycji\"." % self.program_list[self.program_index_next]["slug"])
-            rds = view.rds_textbox(default=self.program_list[self.program_index_next]["rds"])
-        else:
-            view.status("aktualizowanie RDS")
-            #okienko
-            #aktualizuj
-            pass
-
-        if rds is not None:
-            print("New rds is "+rds)
-            view.ui.aud_rds.setText(rds)
-
-    def change_program(self):
-        #zmiana audycji
-        
-        self.program_index_next = view.ui.next_aud_preset.currentIndex()
-
-        pgm = self.program_list[self.program_index_next]
-        view.ui.aud_rds.setText(pgm["rds"])
-        
-    #set program incoming
-    def set_next_program(self):
-        #get program starting in next 15 minutes
-        pgm_now = self.program.get_program_now(False,True,time_margin=15)
-
-        #find program by slug (0 by default)
-        index_now = 0 
-
-        for i in range(len(self.program_list)):
-            if self.program_list[i]["slug"] == pgm_now["slug"]:
-                index_now = i
-                break
-
-        view.ui.next_aud_preset.setCurrentIndex(i)
 
 app = QtWidgets.QApplication(sys.argv)
 

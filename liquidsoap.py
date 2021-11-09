@@ -5,10 +5,6 @@ import threading
 
 from PyQt5.QtCore import * 
 
-# class Tracker_signals(QObject):
-#     error = pyqtSignal(int)
-#     connected = pyqtSignal()
-#     disconnected = pyqtSignal()
 
 errors = {
     0:"All right!",
@@ -17,24 +13,23 @@ errors = {
     -3:"Connection refused by server",
     -4:"Unknown",
     -5:"Stream timeout",
-    -6:"Connection timeout"
-
+    -6:"Connection timeout",
+    -10:"Nie udało się zamknąć procesu. Sprawdź, czy emiter nie jest już uruchomiony lub spróbuj zamknąć proces ręcznie.",
+    -11:"Nie udało się uruchomić procesu."
 }
 
 
 class Liquidsoap:
     proc = None
-    #threadpool = QThreadPool()
-
+    
     comm = "liquidsoap"
     liq_file = "client.liq"
     
     connected_flag = False
     errorcode = 0
-    error = ""
-
+    
     running = False
-    live = False
+    #live = False
 
     interval = 0.1
     timeout = 3.0
@@ -55,9 +50,9 @@ class Liquidsoap:
 
             if self.external_proc_running():
                 #teraz to już serio coś się zjebało
-                self.error = "Nie udało się zamknąć procesu. Sprawdź, czy emiter nie jest już uruchomiony lub spróbuj zamknąć proces ręcznie."
-                self.statuscode = -10
-                print("Error: "+self.error)
+                self.set_error(-10)
+                print(self.error_text(self.errorcode))
+                
                 return
         
         self.running = False
@@ -73,9 +68,8 @@ class Liquidsoap:
             attempt += 1
             if attempt >= 3:
                 #nieudane uruchomienie
-                self.error = "Nie udało się uruchomić procesu."
-                self.statuscode = -11
-                print("Error: "+self.error)
+                self.set_error(-11)
+                print(self.error_text(self.errorcode))
                 return
             
         print("Liquidsoap started")
@@ -142,9 +136,10 @@ class Liquidsoap:
 
     def set_error(self,code):
         self.errorcode = code
+        print(self.error_text(self.errorcode))
 
-        self.error = errors.get(code,"Unknown error(%d)"%code)
-        print(self.error)
+    def error_text(self,code):
+        return errors.get(code,"Unknown error(%d)"%code)
 
     def start_with_ack(self):
         wait_time = 0.0
@@ -163,10 +158,10 @@ class Liquidsoap:
                 return False
 
             if self.errorcode != 0:
-                print(self.error)
+                print(self.error_text(self.errorcode))
                 return False
 
-        self.live = True
+        #self.live = True
         return True
 
     def stop_with_ack(self):
@@ -186,10 +181,10 @@ class Liquidsoap:
                 return False
 
             if self.errorcode != 0:
-                print(self.error)
+                print(self.error_text(self.errorcode))
                 return False
 
-        self.live = False
+        #self.live = False
         return True
 
     def fetch_error(self):
@@ -213,3 +208,6 @@ class Liquidsoap:
     def connected(self):
         #sprawdza czy połączony
         return "on" in self.send("studio.status")
+
+    def insert_rds(self,code,rds):
+        self.send('S4.insert album="'+code+'"')
