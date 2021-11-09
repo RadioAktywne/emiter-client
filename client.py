@@ -164,7 +164,7 @@ class Core:
             return
 
         #push RDS here - TODO rds
-        liquidsoap.insert_rds(self.program_list[self.program_index_now]["slug"],"")
+        liquidsoap.insert_rds(self.program_list[self.program_index_next]["slug"],"")
 
         if self.live:
             view.status("Zmiana audycji")
