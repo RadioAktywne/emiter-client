@@ -162,6 +162,10 @@ class Gui_utils:
         self.ui.studio_label.setStyleSheet("background-color: rgb(255, 100, 100);")
         self.ui.studio_label.setText("Rozłączanie")
 
+    def studio_status_reconnecting(self):
+        self.ui.studio_label.setStyleSheet("background-color: rgb(255, 100, 100);")
+        self.ui.studio_label.setText("Ponowne łączenie...")
+
     def studio_status_disconnected(self):
         self.ui.studio_label.setStyleSheet("background-color: rgb(255, 0, 0);")
         self.ui.studio_label.setText("ROZŁĄCZONY")

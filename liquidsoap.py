@@ -94,7 +94,7 @@ class Liquidsoap:
                 self.connected_flag = False
 
             #wiadomości hiobowe
-            elif 'Connection failed: Not_found' in proc_line:
+            elif 'Connection failed: Not_found' in proc_line or 'Connection failed: could not connect' in proc_line:
                 self.set_error(-2)
             elif 'Connection refused' in proc_line:
                 self.set_error(-3)

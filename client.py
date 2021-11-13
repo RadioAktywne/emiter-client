@@ -121,6 +121,7 @@ class Core:
                 self.live = False
                 view.util.studio_status_disconnected()
                 view.status("Rozłączono z serwerem emisji")
+                self.connection_error = 0
         else:
             if liquidsoap.connected_flag:
                 #connected right now
@@ -129,8 +130,15 @@ class Core:
                 view.status("Połączono z serwerem emisji")
 
         if liquidsoap.errorcode != self.connection_error:
-            view.errorBox("Błąd połączenia",liquidsoap.error_text(liquidsoap.errorcode))
-            self.disconnect()
+            if liquidsoap.errorcode >= 0:
+                #when errorcode set to 0 (successful connection after error occured)
+                view.errorBox("Informacja","Ponownie połączono z serwerem")
+            else:
+                #non-zero code - error occured
+                view.errorBox("Błąd połączenia",liquidsoap.error_text(liquidsoap.errorcode))
+                view.util.studio_status_reconnecting()
+                view.status("Błąd połączenia: "+liquidsoap.error_text(liquidsoap.errorcode))
+            #self.disconnect()
             self.connection_error = liquidsoap.errorcode
             
 
