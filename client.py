@@ -84,6 +84,8 @@ class Core:
         {"slug":"custom", "listname":"<custom> Inna audycja", "rds":"", "anytime":True}
     ]
 
+    rds = ""
+
     live = False
     connection_error = 0
     studio_counter = 0
@@ -172,7 +174,7 @@ class Core:
             return
 
         #push RDS here - TODO rds
-        liquidsoap.insert_rds(self.program_list[self.program_index_next]["slug"],"")
+        liquidsoap.insert_rds(self.program_list[self.program_index_next]["slug"],self.rds)
 
         if self.live:
             view.status("Zmiana audycji")
@@ -192,6 +194,8 @@ class Core:
         #self.threadpool.start(split)
         rds = None
 
+        change_rds = False
+
         if self.program_index_next == 0:
             view.errorBox("Błąd","Nie wybrano żadnej audycji")
         elif self.program_index_next != self.program_index_now:
@@ -200,13 +204,20 @@ class Core:
         else:
             view.status("aktualizowanie RDS")
             #okienko
-            rds = view.rds_textbox(default=self.program_list[self.program_index_now]["rds"])
+            rds = view.rds_textbox(default=self.rds)
             #aktualizuj
+            change_rds = True
             pass
 
         if rds is not None:
             print("New rds is "+rds)
+            self.rds = rds
             view.ui.aud_rds.setText(rds)
+
+            if change_rds:
+                #ustaw nowy RDS
+                liquidsoap.insert_rds(self.program_list[self.program_index_now]["slug"],self.rds)
+                view.status("Zaktualizowano RDS")
 
     def change_program(self):
         #zmiana audycji
@@ -215,6 +226,7 @@ class Core:
 
         pgm = self.program_list[self.program_index_next]
         view.ui.aud_rds.setText(pgm["rds"])
+        self.rds = pgm["rds"]
         
     #set program incoming
     def set_next_program(self):

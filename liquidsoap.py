@@ -210,4 +210,4 @@ class Liquidsoap:
         return "on" in self.send("studio.status")
 
     def insert_rds(self,code,rds):
-        self.send('S4.insert album="'+code+'"')
+        self.send('S4.insert album="'+code+'", title="'+rds+'"')
