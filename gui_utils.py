@@ -85,11 +85,13 @@ class Gui_utils:
         if ts < 0:
             if negative_time:
                 obj.setText(time.strftime("-%H:%M:%S ",time.gmtime(abs(ts))))
+                return True
             else:
                 #nic nie rób
                 pass
         else:
             obj.setText(time.strftime("%H:%M:%S ",time.gmtime(ts)))
+            return False
 
 
     def update_break_downtime(self,t):
