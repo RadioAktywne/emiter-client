@@ -8,7 +8,6 @@ import time
 
 #dni tygodnia
 wdays = ['Poniedziałek','Wtorek','Środa','Czwartek','Piątek','Sobota','Niedziela']
-
 class Gui_utils:
 
     def __init__(self,ui_object):
@@ -68,7 +67,7 @@ class Gui_utils:
 
     #data
     def set_date(self,wd,d):
-        self.ui.current_date.setText(time.strftime("%Y-%m-%d",d))
+        self.ui.current_date.setText(time.strftime("%d %B",d))
         self.ui.current_wd.setText(wdays[wd])
 
     #zegary
