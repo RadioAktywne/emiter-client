@@ -20,13 +20,21 @@ import emiterui
 import liquidsoap
 import program  
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
+#### CONFIG START ####
 
-#import danych z client.cfg
+#API path
+api_path="https://cloud.radioaktywne.pl/api"
+
+#loglevel
+loglevel = logging.INFO
+
+#### CONFIG END ####
+
+#get real path of file
 path = os.path.dirname(os.path.realpath(__file__))
-with open(path+'/client.cfg') as cfgfile:
-    #wykonaj zawartość pliku by pobrać zmienne z konfiguracji
-    exec(cfgfile.read())
+
+#set logging to stdout and file
+logging.basicConfig(handlers=[logging.FileHandler(path+'/client.log'),logging.StreamHandler()], level=loglevel,format='%(asctime)s %(levelname)s: %(message)s')
 
 class View(QtWidgets.QMainWindow):
 
@@ -192,6 +200,8 @@ class Core:
                 view.ui.studio_downtime.setStyleSheet("color: rgb(0, 0, 0); background-color: rgb(255, 0, 0)")
                 #Set thread to blink-out after 0.5 s
                 threading.Thread(target=self.blink_reset_after,args=(0.5,)).start()
+        else:
+            view.util.disable_clock(view.ui.studio_downtime)
 
 
                 
@@ -227,6 +237,7 @@ class Core:
         #check if program starts today
         if self.program_list[self.program_index_next]["anytime"]:
             logging.info("Program %s can be started anytime" % self.program_list[self.program_index_next]["slug"])
+            self.studio_endtime_flag = False
         else:
             #check if it starts today
             now = time.localtime()
@@ -249,8 +260,6 @@ class Core:
 
                 self.studio_endtime_flag = True
                 
-                #TODO set endtime
-
                 #create endtime based on today and program time
                 #print(pgm_today)
                 dt_start = datetime(now.tm_year,now.tm_mon,now.tm_mday,pgm_today["begin_h"],pgm_today["begin_m"],0)
@@ -278,6 +287,7 @@ class Core:
 
         #push RDS here
         liquidsoap.insert_rds(self.program_list[self.program_index_next]["slug"],self.rds)
+        view.ui.aud_rds.setText(self.rds)
 
         if self.live:
             view.status("Zmiana audycji")
@@ -353,7 +363,7 @@ class Core:
     def update_pgm_list(self):
         #load api
         view.status("Pobieranie danych z API...")
-        self.program.update_from_api("https://cloud.radioaktywne.pl/api")
+        self.program.update_from_api(api_path)
         
         programs = self.program.list_all_programs()
     
@@ -377,6 +387,7 @@ class Core:
         view.ui.next_aud_preset.setCurrentIndex(0)
 
 
+logging.info("---- CLIENT START")
 app = QtWidgets.QApplication(sys.argv)
 
 core = Core()
@@ -408,4 +419,5 @@ appout = app.exec()
 
 #when closed:
 liquidsoap.stop()
+logging.info("---- CLIENT STOP")
 sys.exit(appout)
