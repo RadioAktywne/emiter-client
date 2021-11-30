@@ -70,15 +70,20 @@ class View(QtWidgets.QMainWindow):
             return rds
 
     def closeEvent(self,event):
-    #     reply = QMessageBox.question(self, 'Window Close', 'Are you sure you want to close the window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        #message
+        msg = "Czy jesteś pewien że chcesz zamknąć?\nPamiętaj, że jeśli program uruchomiony jest z poziomu Claudii, powinien być zamknięty przyciskiem 'Stop studio'."
         
-    #     if reply == QMessageBox.Yes:
-    #         event.accept()
-    #         print('Window closed')
-    #     else:
-    #         event.ignore()
-        event.accept()
+        #if live show, add info about it
+        if core.live:
+            msg = "TRWA AUDYCJA NA ŻYWO!\nAktualnie jesteś połączony z serwerem emisji.\nZamkniecie spowoduje zakończenie transmisji.\n\n"+msg
+            
+        reply = QMessageBox.question(self, 'Zamykanie', msg, QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         
+        if reply == QMessageBox.Yes:
+            event.accept()
+            logging.info('Window closed')
+        else:
+            event.ignore()
 
 class Core:
 
