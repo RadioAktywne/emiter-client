@@ -209,6 +209,11 @@ class Core:
     def blink_reset_after(self,t):
         time.sleep(t)
         view.ui.studio_downtime.setStyleSheet("color: rgb(255, 0, 0); background-color: rgb(0, 0, 0)")
+
+    def rewrite_rds(self,t):
+        time.sleep(t)
+        logging.info("Rewriting RDS...")
+        liquidsoap.insert_rds(self.program_list[self.program_index_now]["slug"],self.rds)
                 
     def disconnect(self):
         logging.info("Disconnect button pressed")
@@ -303,6 +308,10 @@ class Core:
 
         #set start time
         self.studio_start_timer = time.time()
+
+        #due to bug in emiter-server
+        #rewrite RDS after a few seconds
+        threading.Thread(target=self.rewrite_rds,args=(5,)).start()
 
     def update_rds(self):
         logging.info("Update RDS button presed")
