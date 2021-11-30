@@ -229,7 +229,7 @@ class Ui_EmiterClient(object):
 
     def retranslateUi(self, EmiterClient):
         _translate = QtCore.QCoreApplication.translate
-        EmiterClient.setWindowTitle(_translate("EmiterClient", "Emiter-client v0.1.0 (RadioAktywne)"))
+        EmiterClient.setWindowTitle(_translate("EmiterClient", "Emiter-client v0.2 (RadioAktywne)"))
         self.current_time.setText(_translate("EmiterClient", "- -:- -:- - "))
         self.current_break_downtime.setText(_translate("EmiterClient", "- -:- - "))
         self.current_date.setText(_translate("EmiterClient", "####-##-##"))
