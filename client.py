@@ -48,6 +48,8 @@ class View(QtWidgets.QMainWindow):
 
         self.ui.statusbar.showMessage("Emiter - system emisyjny Radia Aktywnego")
 
+        self.util.studio_status_disconnected()
+
     def errorBox(self,title,text):
         box = QMessageBox.about(self,title,text)
 
@@ -83,6 +85,8 @@ class Core:
     init = True
 
     break_interval = 30*60
+
+    program = program.Program()
 
     program_index_now = 0
     program_index_next = 0
@@ -129,6 +133,9 @@ class Core:
             if not liquidsoap.connected_flag:
                 #disconnected now
                 self.live = False
+                
+                view.ui.aud_rds.setText("")
+                view.ui.current_aud_preset.setText("")
                 view.util.studio_status_disconnected()
                 view.status("Rozłączono z serwerem emisji")
                 self.connection_error = 0
@@ -341,7 +348,7 @@ class Core:
     def update_pgm_list(self):
         #load api
         view.status("Pobieranie danych z API...")
-        self.program = program.Program("https://cloud.radioaktywne.pl/api")
+        self.program.update_from_api("https://cloud.radioaktywne.pl/api")
         
         programs = self.program.list_all_programs()
     
