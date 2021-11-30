@@ -11,9 +11,8 @@ set("server.socket.path",homedir^"client.sock")
 set("log.stdout",true)
 set("log.file.path",homedir^"liquidsoap.log") #ścieżka do loga
 
-#radio = input.http(buffer=5.,"https://listen.radioaktywne.pl:8443/ramp3")
-#radio=input.jack(id="live")
-radio = single(homedir^"muzyka.flac")
+#input source
+radio=input.jack(id="emiter")
 
 radio = server.insert_metadata(id="S4",radio)
 
