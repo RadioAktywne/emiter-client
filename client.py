@@ -8,7 +8,9 @@ from PyQt5.QtCore import *
 
 from PyQt5.QtWidgets import QApplication, QDialog, QTableWidget, QTableWidgetItem, QMessageBox, QInputDialog
 
+import logging
 import time
+from datetime import datetime
 import json
 import signal
 import threading
@@ -18,11 +20,21 @@ import emiterui
 import liquidsoap
 import program  
 
-#import danych z client.cfg
+#### CONFIG START ####
+
+#API path
+api_path="https://cloud.radioaktywne.pl/api"
+
+#loglevel
+loglevel = logging.INFO
+
+#### CONFIG END ####
+
+#get real path of file
 path = os.path.dirname(os.path.realpath(__file__))
-with open(path+'/client.cfg') as cfgfile:
-    #wykonaj zawartość pliku by pobrać zmienne z konfiguracji
-    exec(cfgfile.read())
+
+#set logging to stdout and file
+logging.basicConfig(handlers=[logging.FileHandler(path+'/client.log'),logging.StreamHandler()], level=loglevel,format='%(asctime)s %(levelname)s: %(message)s')
 
 class View(QtWidgets.QMainWindow):
 
@@ -44,11 +56,17 @@ class View(QtWidgets.QMainWindow):
 
         self.ui.statusbar.showMessage("Emiter - system emisyjny Radia Aktywnego")
 
+        self.util.studio_status_disconnected()
+
     def errorBox(self,title,text):
         box = QMessageBox.about(self,title,text)
 
     def status(self,text):
         self.ui.statusbar.showMessage(time.strftime("%H:%M:%S ")+text)
+
+    def question(self,header,text):
+        resp = QMessageBox.question(self,header,text, QMessageBox.Yes | QMessageBox.No )
+        return resp == QMessageBox.Yes
 
     def rds_textbox(self,default=""):
         #TODO default
@@ -60,21 +78,28 @@ class View(QtWidgets.QMainWindow):
             return rds
 
     def closeEvent(self,event):
-    #     reply = QMessageBox.question(self, 'Window Close', 'Are you sure you want to close the window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        #message
+        msg = "Czy jesteś pewien że chcesz zamknąć?\nPamiętaj, że jeśli program uruchomiony jest z poziomu Claudii, powinien być zamknięty przyciskiem 'Stop studio'."
         
-    #     if reply == QMessageBox.Yes:
-    #         event.accept()
-    #         print('Window closed')
-    #     else:
-    #         event.ignore()
-        event.accept()
+        #if live show, add info about it
+        if core.live:
+            msg = "TRWA AUDYCJA NA ŻYWO!\nAktualnie jesteś połączony z serwerem emisji.\nZamkniecie spowoduje zakończenie transmisji.\n\n"+msg
+            
+        reply = QMessageBox.question(self, 'Zamykanie', msg, QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         
+        if reply == QMessageBox.Yes:
+            event.accept()
+            logging.info('Window closed')
+        else:
+            event.ignore()
 
 class Core:
 
     init = True
 
     break_interval = 30*60
+
+    program = program.Program()
 
     program_index_now = 0
     program_index_next = 0
@@ -84,9 +109,11 @@ class Core:
         {"slug":"custom", "listname":"<custom> Inna audycja", "rds":"", "anytime":True}
     ]
 
+    rds = ""
+
     live = False
     connection_error = 0
-    studio_counter = 0
+    #studio_counter = 0
 
     studio_start_timer = 0
     studio_endtime_flag = False
@@ -119,8 +146,18 @@ class Core:
             if not liquidsoap.connected_flag:
                 #disconnected now
                 self.live = False
+                
+                view.ui.aud_rds.setText("")
+                view.ui.current_aud_preset.setText("")
                 view.util.studio_status_disconnected()
                 view.status("Rozłączono z serwerem emisji")
+                self.connection_error = 0
+
+                self.studio_endtime_flag = False
+
+                #disable all clocks
+                view.util.disable_clock(view.ui.studio_uptime)
+                view.util.disable_clock(view.ui.studio_downtime)
         else:
             if liquidsoap.connected_flag:
                 #connected right now
@@ -129,8 +166,15 @@ class Core:
                 view.status("Połączono z serwerem emisji")
 
         if liquidsoap.errorcode != self.connection_error:
-            view.errorBox("Błąd połączenia",liquidsoap.error_text(liquidsoap.errorcode))
-            self.disconnect()
+            if liquidsoap.errorcode >= 0:
+                #when errorcode set to 0 (successful connection after error occured)
+                view.errorBox("Informacja","Ponownie połączono z serwerem")
+            else:
+                #non-zero code - error occured
+                view.errorBox("Błąd połączenia",liquidsoap.error_text(liquidsoap.errorcode))
+                view.util.studio_status_reconnecting()
+                view.status("Błąd połączenia: "+liquidsoap.error_text(liquidsoap.errorcode))
+            #self.disconnect()
             self.connection_error = liquidsoap.errorcode
             
 
@@ -144,16 +188,48 @@ class Core:
         break_sec = self.break_interval - (time.time() % self.break_interval) +1
         view.util.update_break_downtime(time.gmtime(break_sec))
 
-        #TODO zegar studia
+        #studio uptime clock
+        if self.live:
+            view.util.update_clock(view.ui.studio_uptime,time.gmtime(time.time()-self.studio_start_timer))
 
+        #studio downtime clock
+        if self.studio_endtime_flag:
+            overtime = view.util.update_clock_from_timestamp(view.ui.studio_downtime,self.studio_end_timer-time.time()+1,negative_time=True)
+            if overtime:
+                #Blink-in
+                view.ui.studio_downtime.setStyleSheet("color: rgb(0, 0, 0); background-color: rgb(255, 0, 0)")
+                #Set thread to blink-out after 0.5 s
+                threading.Thread(target=self.blink_reset_after,args=(0.5,)).start()
+        else:
+            view.util.disable_clock(view.ui.studio_downtime)
+
+
+                
+    #Reset studio downtime flag to normal
+    def blink_reset_after(self,t):
+        time.sleep(t)
+        view.ui.studio_downtime.setStyleSheet("color: rgb(255, 0, 0); background-color: rgb(0, 0, 0)")
+
+    def rewrite_rds(self,t):
+        time.sleep(t)
+        logging.info("Rewriting RDS...")
+        liquidsoap.insert_rds(self.program_list[self.program_index_now]["slug"],self.rds)
+                
     def disconnect(self):
-        print("przycisk rozłącz")
+        logging.info("Disconnect button pressed")
+        if not self.live:
+            view.errorBox("Błąd","Już rozłączono!")
+            return
+        
         view.util.studio_status_disconnecting()
         liquidsoap.stop_studio()
         self.program_index_now = 0
 
     def connect(self):
-        print("przycisk łącze teraz")
+        logging.info("Program start button pressed")
+
+        #TODO disable downtime clock
+        view.util.disable_clock(view.ui.studio_downtime)
     
         if self.program_list[self.program_index_next]["slug"] == "":
             view.errorBox("Błąd","Nie wybrano audycji")
@@ -163,8 +239,60 @@ class Core:
             view.errorBox("Błąd","Nie zmieniono audycji")
             return
 
-        #push RDS here - TODO rds
-        liquidsoap.insert_rds(self.program_list[self.program_index_next]["slug"],"")
+        #check if program starts today
+        if self.program_list[self.program_index_next]["anytime"]:
+            logging.info("Program %s can be started anytime" % self.program_list[self.program_index_next]["slug"])
+            self.studio_endtime_flag = False
+        else:
+            #check if it starts today
+            now = time.localtime()
+            wd = now.tm_wday+1
+            
+            #get programs today
+            pgms_today = self.program.list_programs(wd,0,0,0)
+            #print(pgms_today)
+
+            pgm_today = None
+            for pgm in pgms_today:
+                if not pgm["replay"]:
+                    if pgm["program"]["slug"] == self.program_list[self.program_index_next]["slug"]:
+                        pgm_today = pgm
+                        break
+
+            #if program found
+            if pgm_today is not None:
+                logging.info("Program %s is today" % pgm_today["program"]["slug"])
+
+                self.studio_endtime_flag = True
+                
+                #create endtime based on today and program time
+                #print(pgm_today)
+                dt_start = datetime(now.tm_year,now.tm_mon,now.tm_mday,pgm_today["begin_h"],pgm_today["begin_m"],0)
+                ts_start = dt_start.timestamp()
+                self.studio_end_timer = ts_start + pgm_today["duration"]*60
+
+
+
+            else:
+                logging.info("Program %s is NOT today" % self.program_list[self.program_index_next]["slug"])
+                resp = view.question("Błąd wyboru audycji","Audycja '"+self.program_list[self.program_index_next]["slug"]+"' nie odbywa się dziś!\n"+
+                    "- Sprawdź, czy wybrałeś prawidłową audycję\n"+
+                    "- Jeśli chcesz prowadzić audycję poza standardowymi godzinami, potrzebujesz zgody RedProga,\n"+
+                    "- W przypadku niestandardowej audycji (bez powtórki) poza godzinami nadawania, wybierz z listy 'inna audycja'.\n\n"+
+                    "Czy mimo to chcesz kontynuować?")
+
+                if resp:
+                    #set program but endtime flag is false
+                    self.studio_endtime_flag = False
+                else:
+                    #abort
+                    logging.info("Aborted")
+                    return
+
+
+        #push RDS here
+        liquidsoap.insert_rds(self.program_list[self.program_index_next]["slug"],self.rds)
+        view.ui.aud_rds.setText(self.rds)
 
         if self.live:
             view.status("Zmiana audycji")
@@ -178,11 +306,18 @@ class Core:
         view.ui.current_aud_preset.setText(self.program_list[self.program_index_now]["listname"])
 
 
+        #set start time
+        self.studio_start_timer = time.time()
+
+        #due to bug in emiter-server
+        #rewrite RDS after a few seconds
+        threading.Thread(target=self.rewrite_rds,args=(5,)).start()
+
     def update_rds(self):
-        print("przycisk aktualizuj")
-        #split = Comm(['record.split czwartek'])
-        #self.threadpool.start(split)
+        logging.info("Update RDS button presed")
         rds = None
+
+        change_rds = False
 
         if self.program_index_next == 0:
             view.errorBox("Błąd","Nie wybrano żadnej audycji")
@@ -192,21 +327,28 @@ class Core:
         else:
             view.status("aktualizowanie RDS")
             #okienko
-            rds = view.rds_textbox(default=self.program_list[self.program_index_now]["rds"])
+            rds = view.rds_textbox(default=self.rds)
             #aktualizuj
+            change_rds = True
             pass
 
         if rds is not None:
-            print("New rds is "+rds)
+            logging.info("New rds is "+rds)
+            self.rds = rds
             view.ui.aud_rds.setText(rds)
+
+            if change_rds:
+                #ustaw nowy RDS
+                liquidsoap.insert_rds(self.program_list[self.program_index_now]["slug"],self.rds)
+                view.status("Zaktualizowano RDS")
 
     def change_program(self):
         #zmiana audycji
-        print("zmiana na pasku")
         self.program_index_next = view.ui.next_aud_preset.currentIndex()
 
         pgm = self.program_list[self.program_index_next]
         view.ui.aud_rds.setText(pgm["rds"])
+        self.rds = pgm["rds"]
         
     #set program incoming
     def set_next_program(self):
@@ -230,7 +372,7 @@ class Core:
     def update_pgm_list(self):
         #load api
         view.status("Pobieranie danych z API...")
-        self.program = program.Program("https://cloud.radioaktywne.pl/api/dev")
+        self.program.update_from_api(api_path)
         
         programs = self.program.list_all_programs()
     
@@ -254,6 +396,7 @@ class Core:
         view.ui.next_aud_preset.setCurrentIndex(0)
 
 
+logging.info("---- CLIENT START")
 app = QtWidgets.QApplication(sys.argv)
 
 core = Core()
@@ -263,7 +406,7 @@ view = View()
 liquidsoap = liquidsoap.Liquidsoap()
 if liquidsoap.fetch_error() < 0:
     #błąd
-    view.errorBox("Emiter - Krytyczny błąd",liquidsoap.error)
+    view.errorBox("Emiter - Krytyczny błąd","Nie udało się uruchomić klienta systemu emisji")
     sys.exit(-1)
 
 view.show()
@@ -271,7 +414,7 @@ view.show()
 
 #handle SIGTERM signal generated by Claudia (stop liquidsoap proc and exit)
 def sig_handle(signo,stack_frame):
-    print("signal handled")
+    logging.info("SIGTERM handled. Closing...")
     liquidsoap.stop()
     sys.exit(0)
 
@@ -285,4 +428,5 @@ appout = app.exec()
 
 #when closed:
 liquidsoap.stop()
+logging.info("---- CLIENT STOP")
 sys.exit(appout)

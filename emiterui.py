@@ -68,7 +68,7 @@ class Ui_EmiterClient(object):
         self.current_break_downtime.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
         self.current_break_downtime.setObjectName("current_break_downtime")
         self.current_date = QtWidgets.QLabel(self.current_frame)
-        self.current_date.setGeometry(QtCore.QRect(10, 30, 91, 21))
+        self.current_date.setGeometry(QtCore.QRect(10, 30, 111, 21))
         font = QtGui.QFont()
         font.setFamily("Arial")
         font.setPointSize(12)
@@ -229,7 +229,7 @@ class Ui_EmiterClient(object):
 
     def retranslateUi(self, EmiterClient):
         _translate = QtCore.QCoreApplication.translate
-        EmiterClient.setWindowTitle(_translate("EmiterClient", "Emiter-client v0.1.0 (RadioAktywne)"))
+        EmiterClient.setWindowTitle(_translate("EmiterClient", "Emiter-client v0.2 (RadioAktywne)"))
         self.current_time.setText(_translate("EmiterClient", "- -:- -:- - "))
         self.current_break_downtime.setText(_translate("EmiterClient", "- -:- - "))
         self.current_date.setText(_translate("EmiterClient", "####-##-##"))

@@ -17,7 +17,7 @@
    </font>
   </property>
   <property name="windowTitle">
-   <string>Emiter-client v0.1.0 (RadioAktywne)</string>
+   <string>Emiter-client v0.2 (RadioAktywne)</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout">
@@ -134,7 +134,7 @@ color: rgb(255,0,0)</string>
           <rect>
            <x>10</x>
            <y>30</y>
-           <width>91</width>
+           <width>111</width>
            <height>21</height>
           </rect>
          </property>

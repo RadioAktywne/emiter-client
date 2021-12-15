@@ -2,6 +2,7 @@ import os
 import subprocess
 import time
 import threading
+import logging
 
 from PyQt5.QtCore import * 
 
@@ -43,7 +44,7 @@ class Liquidsoap:
         
         #sprawdź czy proces liquidsoapa nie pracuje już na kompie
         if self.external_proc_running():
-            print("Found not properly closed liquidsoap thread. Killing attempt...")
+            logging.info("Found not properly closed liquidsoap thread. Killing attempt...")
             #próba zabicia
             self.send("sudoku")
             time.sleep(5)
@@ -59,7 +60,7 @@ class Liquidsoap:
         attempt = 1
 
         while not self.running:
-            print("starting liquidsoap process attempt #"+str(attempt))
+            logging.info("starting liquidsoap process attempt #"+str(attempt))
             self.proc = subprocess.Popen([self.comm, liq_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
             time.sleep(1)
 
@@ -69,10 +70,10 @@ class Liquidsoap:
             if attempt >= 3:
                 #nieudane uruchomienie
                 self.set_error(-11)
-                print(self.error_text(self.errorcode))
+                logging.error(self.error_text(self.errorcode))
                 return
             
-        print("Liquidsoap started")
+        logging.info("Liquidsoap started")
 
         #run STODUT tracking
         self.tracker = threading.Thread(target=self.trace_stdout)
@@ -94,7 +95,7 @@ class Liquidsoap:
                 self.connected_flag = False
 
             #wiadomości hiobowe
-            elif 'Connection failed: Not_found' in proc_line:
+            elif 'Connection failed: Not_found' in proc_line or 'Connection failed: could not connect' in proc_line:
                 self.set_error(-2)
             elif 'Connection refused' in proc_line:
                 self.set_error(-3)
@@ -109,11 +110,11 @@ class Liquidsoap:
     #     self.stop()
 
     def stop(self):
-        print("stopping liquidsoap process")
+        logging.info("stopping liquidsoap process")
         try:
             self.proc.kill()
         except AttributeError:
-            print("nic do zamknięcia!")
+            logging.info("Nothing to close!")
         
         finally:
             self.running = False
@@ -126,8 +127,8 @@ class Liquidsoap:
         for proc in proc_list:
             #szukaj w liście procesów nazwy skryptu
             if self.liq_file in proc:
-                print("found:")
-                print(proc)
+                logging.debug("found:")
+                logging.debug(proc)
 
                 found = True
                 break
@@ -136,7 +137,7 @@ class Liquidsoap:
 
     def set_error(self,code):
         self.errorcode = code
-        print(self.error_text(self.errorcode))
+        logging.info(self.error_text(self.errorcode))
 
     def error_text(self,code):
         return errors.get(code,"Unknown error(%d)"%code)
@@ -153,12 +154,12 @@ class Liquidsoap:
 
             if wait_time >= self.timeout:
                 #timeout
-                print("Connection timeout...")
+                logging.error("Connection timeout...")
                 self.errorcode = -6
                 return False
 
             if self.errorcode != 0:
-                print(self.error_text(self.errorcode))
+                logging.error(self.error_text(self.errorcode))
                 return False
 
         #self.live = True
@@ -176,12 +177,12 @@ class Liquidsoap:
 
             if wait_time >= self.timeout:
                 #timeout
-                print("Disonnection timeout...")
+                logging.error("Disonnection timeout...")
                 self.errorcode = -6
                 return False
 
             if self.errorcode != 0:
-                print(self.error_text(self.errorcode))
+                logging.error(self.error_text(self.errorcode))
                 return False
 
         #self.live = False
@@ -210,4 +211,4 @@ class Liquidsoap:
         return "on" in self.send("studio.status")
 
     def insert_rds(self,code,rds):
-        self.send('S4.insert album="'+code+'"')
+        self.send('S4.insert album="'+code+'", title="'+rds+'"')

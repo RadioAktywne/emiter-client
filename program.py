@@ -18,8 +18,8 @@ class Program:
     schedule = []
     programs = []
 
-    #init - pobiera program
-    def __init__(self,url,sufix="default"):
+    #pobiera program z API
+    def update_from_api(self,url,sufix="default"):
         
         #pobierz listę slotów
         rq = requests.get(url+"/timeslots")
