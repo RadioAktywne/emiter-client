@@ -22,7 +22,11 @@ class Program:
     def update_from_api(self,url,sufix="default"):
         
         #pobierz listę slotów
-        rq = requests.get(url+"/timeslots")
+        try:
+            rq = requests.get(url+"/timeslots")
+        except:
+            logging.error("API connection error")
+            return False
 
         #jeśli odpowiada JSONem
         try:
@@ -36,14 +40,14 @@ class Program:
         except JSONDecodeError:
             
             logging.warning("API response /timeslots decoding error (status %d)"% rq.status_code)
-            #jeśli nie:
-            #importowanie dane z json-a
-            # with open(cfg.cfg['path_schedules']+"timeslots_"+sufix) as f:
-            #     timeslots = json.load(f)
-            #     f.close()
+            return False
 
         #pobierz listę programów
-        rq = requests.get(url+"/programs")
+        try:
+            rq = requests.get(url+"/programs")
+        except:
+            logging.error("API connection error")
+            return False
 
         #jeśli odpowiada JSONem
         try:
@@ -57,12 +61,8 @@ class Program:
         except JSONDecodeError:
             
             logging.warning("API response /programs decoding error (status %d)"% rq.status_code)
+            return False
             
-            #jeśli nie:
-            #importowanie dane z json-a
-            with open(cfg.cfg['path_schedules']+"programs_"+sufix) as f:
-                programs = json.load(f)
-                f.close()
         
         #przerzut do listy jeśli audycja ma być widoczna przez system
         for uuid in timeslots:
@@ -100,6 +100,8 @@ class Program:
                     "people": []
                 }
                 self.programs.append(stub_program)
+
+        return True
         
 
     #funkcja do sortowania timeslotów

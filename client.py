@@ -372,8 +372,20 @@ class Core:
     def update_pgm_list(self):
         #load api
         view.status("Pobieranie danych z API...")
-        self.program.update_from_api(api_path)
         
+        for i in range(5):
+            
+            if i > 0:
+                view.status("Ponowna próba pobrania audycji z API (%d)..." % i)
+            # try to get data from api
+            if self.program.update_from_api(api_path):
+                break
+
+            if i == 4:
+                view.errorBox("Błąd","Nie udało się wczytać listy audycji.\n\n- Sprawdź, czy komputer jest połączony z internetem,\n- Być może to awaria serwera emisji. Skontaktuj się z działem IT.")
+                return
+            time.sleep(5)
+
         programs = self.program.list_all_programs()
     
         view.status("Wczytano %d audycji z API" % len(programs))
