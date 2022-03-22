@@ -193,9 +193,10 @@ class Liquidsoap:
         return self.errorcode
 
     def send(self,command):
+        logging.info("sending command: "+command)
         socket_path = self.path+'/client.sock'
         #print(socket_path)
-        result = os.popen("( echo '"+command+"'; echo exit ) | socat "+socket_path+' -').read()
+        result = os.popen('( echo "'+command+'"; echo exit ) | socat '+socket_path+' -').read()
         return result
 
     def start_studio(self):
@@ -211,4 +212,4 @@ class Liquidsoap:
         return "on" in self.send("studio.status")
 
     def insert_rds(self,code,rds):
-        self.send('S4.insert album="'+code+'", title="'+rds+'"')
+        self.send('S4.insert album=\\"'+code+'\\", title=\\"'+rds+'\\"')
