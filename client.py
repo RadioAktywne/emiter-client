@@ -311,7 +311,7 @@ class Core:
 
         #due to bug in emiter-server
         #rewrite RDS after a few seconds
-        #threading.Thread(target=self.rewrite_rds,args=(5,)).start()
+        threading.Thread(target=self.rewrite_rds,args=(2,)).start()
 
     def update_rds(self):
         logging.info("Update RDS button presed")
