@@ -290,16 +290,16 @@ class Core:
                     return
 
 
-        #push RDS here
-        liquidsoap.insert_rds(self.program_list[self.program_index_next]["slug"],self.rds)
-        view.ui.aud_rds.setText(self.rds)
-
         if self.live:
             view.status("Zmiana audycji")
         else:
             view.status("Łączenie")
             view.util.studio_status_wait()
             liquidsoap.start_studio()
+
+        #push RDS here
+        liquidsoap.insert_rds(self.program_list[self.program_index_next]["slug"],self.rds)
+        view.ui.aud_rds.setText(self.rds)
 
         #przerzut
         self.program_index_now = self.program_index_next
@@ -311,7 +311,7 @@ class Core:
 
         #due to bug in emiter-server
         #rewrite RDS after a few seconds
-        threading.Thread(target=self.rewrite_rds,args=(5,)).start()
+        threading.Thread(target=self.rewrite_rds,args=(2,)).start()
 
     def update_rds(self):
         logging.info("Update RDS button presed")
