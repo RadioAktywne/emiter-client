@@ -25,8 +25,7 @@ import program
 #API path
 api_path="https://cloud.radioaktywne.pl/api"
 
-#loglevel
-loglevel = logging.INFO
+loglevel = logging.DEBUG
 
 #### CONFIG END ####
 
