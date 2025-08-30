@@ -6,13 +6,13 @@ set("server.timeout",300.)
 #homedir = path.dirname(argv(0))
 #print(socket_path)
 set("server.socket",true)
-set("server.socket.path",homedir^"client.sock")
+set("server.socket.path",homedir^"/client.sock")
 
 set("log.stdout",true)
-set("log.file.path",homedir^"liquidsoap.log") #ścieżka do loga
+set("log.file.path",homedir^"/liquidsoap.log")
 
 #input source
-radio=input.jack(id="emiter")
+radio = input.pulseaudio(id="emiter-virtual-source")
 
 radio = server.insert_metadata(id="S4",radio)
 

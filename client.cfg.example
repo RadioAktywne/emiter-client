@@ -1,5 +1,5 @@
-homedir="/home/realizator/emiter-client/"
-cfg_broadcast_port=8004
+homedir="/workspace"
+cfg_broadcast_port=8009
 cfg_broadcast_host="localhost"
 cfg_broadcast_password="#####"
 

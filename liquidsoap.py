@@ -23,8 +23,10 @@ errors = {
 class Liquidsoap:
     proc = None
     
-    comm = "liquidsoap"
+    comm = "docker"
     liq_file = "client.liq"
+    docker_image = "savonet/liquidsoap:v1.4.3"
+    docker_name = "emiter-liquidsoap"
     
     connected_flag = False
     errorcode = 0
@@ -41,30 +43,59 @@ class Liquidsoap:
 
         #ścieżka do procesu
         liq_path = self.path+"/"+self.liq_file
+        pulse_socket = os.environ.get("PULSE_SERVER", "unix:/run/user/1000/pulse/native")
+        pulse_dir = "/run/user/1000/pulse"
+        pipewire_socket = "/run/user/1000/pipewire-0"
+        user_id = str(os.getuid())
+        group_id = str(os.getgid())
+        pulse_source = os.environ.get("PULSE_SOURCE", "")
+        docker_cmd = [
+            "docker", "run", "--name", self.docker_name, "--rm", "--interactive", "--network", "host", "--tty",
+            "--user", f"{user_id}:{group_id}",
+            "--volume", f"{pulse_dir}:{pulse_dir}",
+            "--volume", f"{pipewire_socket}:{pipewire_socket}",
+            "--volume", f"{self.path}:/workspace",
+            "--workdir", "/workspace",
+            "--env", f"PULSE_SERVER={pulse_socket}",
+            "--env", f"PIPEWIRE_REMOTE=unix:{pipewire_socket}",
+            "--env", f"PULSE_SOURCE={pulse_source}",
+            self.docker_image,
+            "liquidsoap",
+            self.liq_file
+        ]
         
         #sprawdź czy proces liquidsoapa nie pracuje już na kompie
         if self.external_proc_running():
             logging.info("Found not properly closed liquidsoap thread. Killing attempt...")
             #próba zabicia
             self.send("sudoku")
-            time.sleep(5)
+            time.sleep(10)
 
             if self.external_proc_running():
-                #teraz to już serio coś się zjebało
-                self.set_error(-10)
-                print(self.error_text(self.errorcode))
+                logging.info("Trying to kill Docker container...")
+                try:
+                    subprocess.run(["docker", "kill", self.docker_name], check=False)
+                    time.sleep(2)
+                    subprocess.run(["docker", "rm", self.docker_name], check=False)
+                except Exception as e:
+                    logging.error(f"Failed to kill/rm Docker container: {e}")
                 
-                return
+                if self.external_proc_running():
+                    #teraz to już serio coś się zjebało
+                    self.set_error(-10)
+                    print(self.error_text(self.errorcode))
+                    
+                    return
         
         self.running = False
         attempt = 1
 
         while not self.running:
             logging.info("starting liquidsoap process attempt #"+str(attempt))
-            self.proc = subprocess.Popen([self.comm, liq_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+            self.proc = subprocess.Popen(docker_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
             time.sleep(1)
 
-            self.running = self.proc.poll() == None
+            self.running = self.proc.poll() is None
 
             attempt += 1
             if attempt >= 3:
@@ -72,10 +103,8 @@ class Liquidsoap:
                 self.set_error(-11)
                 logging.error(self.error_text(self.errorcode))
                 return
-            
-        logging.info("Liquidsoap started")
-
-        #run STODUT tracking
+        logging.info("Liquidsoap (Docker) started")
+        #run STDOUT tracking
         self.tracker = threading.Thread(target=self.trace_stdout)
         self.tracker.start()
 
@@ -118,6 +147,14 @@ class Liquidsoap:
         
         finally:
             self.running = False
+            # Clean up socket file
+            socket_path = self.path + "/client.sock"
+            try:
+                if os.path.exists(socket_path):
+                    os.unlink(socket_path)
+                    logging.info("Cleaned up socket file")
+            except Exception as e:
+                logging.error(f"Failed to clean up socket: {e}")
 
     def external_proc_running(self):
         #sprawdza, czy proces aktywny
@@ -125,13 +162,23 @@ class Liquidsoap:
 
         found = False
         for proc in proc_list:
-            #szukaj w liście procesów nazwy skryptu
-            if self.liq_file in proc:
+            #szukaj w liście procesów nazwy skryptu lub dockera
+            if self.liq_file in proc or ("docker" in proc and self.docker_name in proc):
                 logging.debug("found:")
                 logging.debug(proc)
 
                 found = True
                 break
+
+        # Also check for running Docker containers
+        if not found:
+            try:
+                result = subprocess.run(["docker", "ps", "--filter", f"name={self.docker_name}", "--format", "{{.Names}}"], capture_output=True, text=True)
+                if self.docker_name in result.stdout:
+                    logging.debug(f"Found running Docker container: {self.docker_name}")
+                    found = True
+            except Exception as e:
+                logging.debug(f"Failed to check Docker containers: {e}")
 
         return found
 
@@ -195,6 +242,9 @@ class Liquidsoap:
     def send(self,command):
         logging.info("sending command: "+command)
         socket_path = self.path+'/client.sock'
+        if not os.path.exists(socket_path):
+            logging.warning("Socket file does not exist")
+            return ""
         #print(socket_path)
         result = os.popen('( echo "'+command+'"; echo exit ) | socat '+socket_path+' -').read()
         return result

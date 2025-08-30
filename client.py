@@ -3,15 +3,14 @@
 
 import sys
 import os
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtWidgets
 from PyQt5.QtCore import * 
 
-from PyQt5.QtWidgets import QApplication, QDialog, QTableWidget, QTableWidgetItem, QMessageBox, QInputDialog
+from PyQt5.QtWidgets import QMessageBox, QInputDialog
 
 import logging
 import time
 from datetime import datetime
-import json
 import signal
 import threading
 
@@ -19,6 +18,8 @@ import gui_utils
 import emiterui
 import liquidsoap
 import program  
+import subprocess
+import os
 
 #### CONFIG START ####
 
@@ -143,7 +144,7 @@ class Core:
 
         #connection tracker
         if self.live:
-            if not liquidsoap.connected_flag:
+            if not liquidsoap_instance.connected_flag:
                 #disconnected now
                 self.live = False
                 
@@ -159,23 +160,23 @@ class Core:
                 view.util.disable_clock(view.ui.studio_uptime)
                 view.util.disable_clock(view.ui.studio_downtime)
         else:
-            if liquidsoap.connected_flag:
+            if liquidsoap_instance.connected_flag:
                 #connected right now
                 self.live = True
                 view.util.studio_status_connected()
                 view.status("Połączono z serwerem emisji")
 
-        if liquidsoap.errorcode != self.connection_error:
-            if liquidsoap.errorcode >= 0:
+        if liquidsoap_instance.errorcode != self.connection_error:
+            if liquidsoap_instance.errorcode >= 0:
                 #when errorcode set to 0 (successful connection after error occured)
                 view.errorBox("Informacja","Ponownie połączono z serwerem")
             else:
                 #non-zero code - error occured
-                view.errorBox("Błąd połączenia",liquidsoap.error_text(liquidsoap.errorcode))
+                view.errorBox("Błąd połączenia",liquidsoap_instance.error_text(liquidsoap_instance.errorcode))
                 view.util.studio_status_reconnecting()
-                view.status("Błąd połączenia: "+liquidsoap.error_text(liquidsoap.errorcode))
+                view.status("Błąd połączenia: "+liquidsoap_instance.error_text(liquidsoap_instance.errorcode))
             #self.disconnect()
-            self.connection_error = liquidsoap.errorcode
+            self.connection_error = liquidsoap_instance.errorcode
             
 
     def secondant(self,now):
@@ -213,16 +214,15 @@ class Core:
     def rewrite_rds(self,t):
         time.sleep(t)
         logging.info("Rewriting RDS...")
-        liquidsoap.insert_rds(self.program_list[self.program_index_now]["slug"],self.rds)
+        liquidsoap_instance.insert_rds(self.program_list[self.program_index_now]["slug"],self.rds)
                 
     def disconnect(self):
         logging.info("Disconnect button pressed")
         if not self.live:
             view.errorBox("Błąd","Już rozłączono!")
             return
-        
         view.util.studio_status_disconnecting()
-        liquidsoap.stop_studio()
+        liquidsoap_instance.stop_studio()
         self.program_index_now = 0
 
     def connect(self):
@@ -247,32 +247,22 @@ class Core:
             #check if it starts today
             now = time.localtime()
             wd = now.tm_wday+1
-            
             #get programs today
             pgms_today = self.program.list_programs(wd,0,0,0)
-            #print(pgms_today)
-
             pgm_today = None
             for pgm in pgms_today:
                 if not pgm["replay"]:
                     if pgm["program"]["slug"] == self.program_list[self.program_index_next]["slug"]:
                         pgm_today = pgm
                         break
-
             #if program found
             if pgm_today is not None:
                 logging.info("Program %s is today" % pgm_today["program"]["slug"])
-
                 self.studio_endtime_flag = True
-                
                 #create endtime based on today and program time
-                #print(pgm_today)
                 dt_start = datetime(now.tm_year,now.tm_mon,now.tm_mday,pgm_today["begin_h"],pgm_today["begin_m"],0)
                 ts_start = dt_start.timestamp()
                 self.studio_end_timer = ts_start + pgm_today["duration"]*60
-
-
-
             else:
                 logging.info("Program %s is NOT today" % self.program_list[self.program_index_next]["slug"])
                 resp = view.question("Błąd wyboru audycji","Audycja '"+self.program_list[self.program_index_next]["slug"]+"' nie odbywa się dziś!\n"+
@@ -280,7 +270,6 @@ class Core:
                     "- Jeśli chcesz prowadzić audycję poza standardowymi godzinami, potrzebujesz zgody RedProga,\n"+
                     "- W przypadku niestandardowej audycji (bez powtórki) poza godzinami nadawania, wybierz z listy 'inna audycja'.\n\n"+
                     "Czy mimo to chcesz kontynuować?")
-
                 if resp:
                     #set program but endtime flag is false
                     self.studio_endtime_flag = False
@@ -288,27 +277,20 @@ class Core:
                     #abort
                     logging.info("Aborted")
                     return
-
-
         if self.live:
             view.status("Zmiana audycji")
         else:
             view.status("Łączenie")
             view.util.studio_status_wait()
-            liquidsoap.start_studio()
-
+            liquidsoap_instance.start_studio()
         #push RDS here
-        liquidsoap.insert_rds(self.program_list[self.program_index_next]["slug"],self.rds)
+        liquidsoap_instance.insert_rds(self.program_list[self.program_index_next]["slug"],self.rds)
         view.ui.aud_rds.setText(self.rds)
-
         #przerzut
         self.program_index_now = self.program_index_next
         view.ui.current_aud_preset.setText(self.program_list[self.program_index_now]["listname"])
-
-
         #set start time
         self.studio_start_timer = time.time()
-
         #due to bug in emiter-server
         #rewrite RDS after a few seconds
         threading.Thread(target=self.rewrite_rds,args=(2,)).start()
@@ -339,7 +321,7 @@ class Core:
 
             if change_rds:
                 #ustaw nowy RDS
-                liquidsoap.insert_rds(self.program_list[self.program_index_now]["slug"],self.rds)
+                liquidsoap_instance.insert_rds(self.program_list[self.program_index_now]["slug"],self.rds)
                 view.status("Zaktualizowano RDS")
 
     def change_program(self):
@@ -411,23 +393,71 @@ class Core:
 logging.info("---- CLIENT START")
 app = QtWidgets.QApplication(sys.argv)
 
-core = Core()
-view = View()
+def ensure_pulse_source():
+    try:
+        result = subprocess.run(['pactl', 'list', 'sources', 'short'], capture_output=True, text=True)
+        for line in result.stdout.splitlines():
+            if 'emiter-virtual-source.monitor' in line:
+                print(f"[INFO] Found existing emiter-virtual-source.monitor")
+                return 'emiter-virtual-source.monitor'
+    except Exception as e:
+        print(f"[WARN] pactl failed: {e}")
+    def try_create_pwloopback():
+        print(f"[DEBUG] Attempting to create emiter-virtual-source with pactl...")
+        proc = subprocess.Popen(['pactl', 'load-module', 'module-null-sink', 'sink_name=emiter-virtual-source'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc.wait()
+        if proc.returncode == 0:
+            print(f"[INFO] Created emiter-virtual-source with pactl")
+            return 'emiter-virtual-source.monitor'
+        else:
+            print(f"[ERROR] Failed to create with pactl")
+            return None
+    try:
+        name = try_create_pwloopback()
+        if name:
+            return name
+    except Exception as e:
+        print(f"[EXCEPTION] Exception during ensure_pulse_source: {e}")
+        try:
+            result = subprocess.run(['pactl', 'list', 'sources', 'short'], capture_output=True, text=True)
+            for line in result.stdout.splitlines():
+                if 'monitor' in line:
+                    name = line.split()[1]
+                    print(f"[INFO] Using fallback monitor source: {name}")
+                    return name
+        except Exception as e2:
+            print(f"[FATAL] Could not find any monitor source: {e2}")
+        raise RuntimeError('PulseAudio error: {}. No suitable source found.'.format(e))
 
-#run liquidsoap subprocess
-liquidsoap = liquidsoap.Liquidsoap()
-if liquidsoap.fetch_error() < 0:
-    #błąd
-    view.errorBox("Emiter - Krytyczny błąd","Nie udało się uruchomić klienta systemu emisji")
+try:
+    pulse_source_name = ensure_pulse_source()
+    if not pulse_source_name or not isinstance(pulse_source_name, str):
+        raise RuntimeError(f"Pulse source name is invalid: {pulse_source_name}")
+    os.environ['PULSE_SOURCE'] = pulse_source_name
+    print(f"[DEBUG] Set PULSE_SOURCE={pulse_source_name}")
+    subprocess.run(['pactl', 'set-default-source', pulse_source_name], check=True)
+    print(f"[DEBUG] Set default source to {pulse_source_name}")
+    liquidsoap_instance = liquidsoap.Liquidsoap()
+    if liquidsoap_instance.fetch_error() < 0:
+        raise RuntimeError("Nie udało się uruchomić klienta systemu emisji")
+except Exception as e:
+    print(f"[FATAL] PulseAudio/Liquidsoap error: {e}")
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
+    msg = QtWidgets.QMessageBox()
+    msg.setIcon(QtWidgets.QMessageBox.Critical)
+    msg.setText("PulseAudio/Liquidsoap error: {}".format(str(e)))
+    msg.setWindowTitle("Emiter - Krytyczny błąd")
+    msg.exec_()
     sys.exit(-1)
 
+core = Core()
+view = View()
 view.show()
 
 
-#handle SIGTERM signal generated by Claudia (stop liquidsoap proc and exit)
 def sig_handle(signo,stack_frame):
     logging.info("SIGTERM handled. Closing...")
-    liquidsoap.stop()
+    liquidsoap_instance.stop()
     sys.exit(0)
 
 signal.signal(signal.SIGTERM, sig_handle)
@@ -439,6 +469,6 @@ threading.Thread(target=core.update_pgm_list).start()
 appout = app.exec()
 
 #when closed:
-liquidsoap.stop()
+liquidsoap_instance.stop()
 logging.info("---- CLIENT STOP")
 sys.exit(appout)
