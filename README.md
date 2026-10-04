@@ -34,11 +34,53 @@ W pozostałych przypadkach instalację opisano w https://www.liquidsoap.info/doc
 
 * Pozostałe pakiety instalujemy poprzez skrypty `INSTALL.sh` i `DEVINSTALL.sh` - ten drugi doinstalowuje narzędzia deweloperskie (m.in. Qt Designera)
 
+## Instalacja z Nix (flake)
+
+Repozytorium zawiera flake, który spina wszystko potrzebne do uruchomienia aplikacji
+(interpreter Python z PyQt5 i `requests`, `socat`, CLI dockera, `pactl`, `ps` oraz
+wtyczki Qt).
+
+Wymagania:
+* Nix z włączonymi flake'ami (np. NixOS)
+* dostęp do dockera
+* uruchomiony PipeWire/PulseAudio w sesji użytkownika oraz istniejące wirtualne źródło
+  `emiter-virtual-source` (patrz sekcja poniżej)
+* konto z `uid = 1000` (aplikacja twardo koduje ścieżki `/run/user/1000/...`
+  do gniazd PulseAudio/PipeWire)
+
+## Wirtualne źródło audio (`emiter-virtual-source`)
+
+```
+serwer Emiter --output.pulseaudio--> emiter-virtual-sink --monitor--> emiter-virtual-source --input.pulseaudio--> emiter-client
+```
+
+### Utworzenie pary wirtualnych obiektów audio
+
+W sesji użytkownika (gdzie działa PipeWire/PulseAudio):
+
+```
+pactl load-module module-virtual-sink sink_name=emiter-virtual-sink
+pactl load-module module-virtual-source source_name=emiter-virtual-source master=emiter-virtual-sink.monitor
+```
+
+Sprawdzenie:
+
+```
+pactl list short sources | grep emiter
+```
+
+Po stronie serwera Emiter program trafia do tego gniazda przez wpis w `emiter.liq`:
+
+```
+output.pulseaudio(sink: "emiter-virtual-sink", program)
+```
+
+
 ## Konfiguracja
 
 #### Konfiguracja połączenia
 Należy skopiować `client.cfg.example` na `client.cfg` i wprowadzić:
-* `homedir` - miejesce umieszczenia kodu
+* `homedir` - katalog, w którym liquidsoap zapisuje logi i gniazdo. **W wersji z Dockerem musi pozostać `/workspace`**
 * `cfg_broadcast_host` - URL serwera
 * `cfg_broadcast_port` - port dosyłu
 * `cfg_broadcast_password` - hasło dosyłu
